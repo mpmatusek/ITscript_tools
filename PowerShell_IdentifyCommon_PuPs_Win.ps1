@@ -1,5 +1,23 @@
-# PowerShell script to detect common PuPs
-Write-Host "Scanning for Potentially Unwanted Programs (PuPs)..." -ForegroundColor Green
+# PowerShell script to detect common PuPs and log results to Desktop
+# Log file will be created as PuP_Scan_Log_<timestamp>.txt on Desktop
+
+# Set up log file path on Desktop with timestamp
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$logFile = "$env:USERPROFILE\Desktop\PuP_Scan_Log_$timestamp.txt"
+
+# Function to write to both console and log file
+function Write-Log {
+    param ($Message, $ForegroundColor = "White")
+    # Write to console
+    Write-Host $Message -ForegroundColor $ForegroundColor
+    # Append to log file with timestamp
+    $logMessage = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
+    Add-Content -Path $logFile -Value $logMessage
+}
+
+# Initialize log file
+Write-Log "Starting PuP scan..." -ForegroundColor Green
+Write-Log "Log file: $logFile"
 
 # List of PuPs and their known identifiers (processes, files, registry keys)
 $PuPs = @{
@@ -21,25 +39,30 @@ $PuPs = @{
     "WinFixer" = @{ Process = "WinFixer.exe"; Path = "*WinFixer*"; RegKey = "HKLM:\Software\WinFixer" }
     "Security Tool" = @{ Process = "SecurityTool.exe"; Path = "*Security Tool*"; RegKey = "HKCU:\Software\Security Tool" }
     "Antivirus 360" = @{ Process = "AV360.exe"; Path = "*Antivirus 360*"; RegKey = "HKLM:\Software\Antivirus 360" }
+    "OneStart Browser" = @{ Process = "OneStart.exe"; Path = "*OneStart*"; RegKey = "HKLM:\Software\OneStart" }
+    "CCleaner" = @{ Process = "CCleaner*.exe"; Path = "*CCleaner*"; RegKey = "HKLM:\Software\Piriform" }
+    "WaveBrowser" = @{ Process = "WaveBrowser.exe"; Path = "*WaveBrowser*"; RegKey = "HKLM:\Software\WaveBrowser" }
 }
 
 # Function to check for PuP processes
 function Check-PuPProcesses {
     param ($PuPName, $ProcessName)
-    Write-Host "Checking processes for $PuPName..."
+    Write-Log "Checking processes for $PuPName..."
     $processes = Get-Process | Where-Object { $_.ProcessName -like $ProcessName } | Select-Object Name, Path, Id
     if ($processes) {
-        Write-Host "Found potential $PuPName processes:" -ForegroundColor Yellow
-        $processes | Format-Table -AutoSize
+        Write-Log "Found potential $PuPName processes:" -ForegroundColor Yellow
+        # Format process info as a string for logging
+        $processOutput = $processes | Format-Table -AutoSize | Out-String
+        Write-Log $processOutput
     } else {
-        Write-Host "No $PuPName processes detected." -ForegroundColor Green
+        Write-Log "No $PuPName processes detected." -ForegroundColor Green
     }
 }
 
 # Function to check for PuP files
 function Check-PuPFiles {
     param ($PuPName, $PathPattern)
-    Write-Host "Checking files for $PuPName..."
+    Write-Log "Checking files for $PuPName..."
     $commonPaths = @(
         "$env:ProgramFiles\*",
         "$env:ProgramFiles(x86)\*",
@@ -52,22 +75,26 @@ function Check-PuPFiles {
         Where-Object { $_.FullName -like $PathPattern -and $_.Extension -in @(".exe", ".dll") }
     }
     if ($files) {
-        Write-Host "Found potential $PuPName files:" -ForegroundColor Yellow
-        $files | Select-Object Name, FullName, LastWriteTime | Format-Table -AutoSize
+        Write-Log "Found potential $PuPName files:" -ForegroundColor Yellow
+        # Format file info as a string for logging
+        $fileOutput = $files | Select-Object Name, FullName, LastWriteTime | Format-Table -AutoSize | Out-String
+        Write-Log $fileOutput
     } else {
-        Write-Host "No $PuPName files detected." -ForegroundColor Green
+        Write-Log "No $PuPName files detected." -ForegroundColor Green
     }
 }
 
 # Function to check for PuP registry keys
 function Check-PuPRegistry {
     param ($PuPName, $RegKey)
-    Write-Host "Checking registry for $PuPName..."
+    Write-Log "Checking registry for $PuPName..."
     if (Test-Path $RegKey) {
-        Write-Host "Found potential $PuPName registry keys:" -ForegroundColor Yellow
-        Get-ItemProperty -Path $RegKey -ErrorAction SilentlyContinue | Format-Table -AutoSize
+        Write-Log "Found potential $PuPName registry keys:" -ForegroundColor Yellow
+        # Format registry info as a string for logging
+        $regOutput = Get-ItemProperty -Path $RegKey -ErrorAction SilentlyContinue | Format-Table -AutoSize | Out-String
+        Write-Log $regOutput
     } else {
-        Write-Host "No $PuPName registry keys detected." -ForegroundColor Green
+        Write-Log "No $PuPName registry keys detected." -ForegroundColor Green
     }
 }
 
@@ -75,22 +102,36 @@ function Check-PuPRegistry {
 foreach ($PuP in $PuPs.GetEnumerator()) {
     $PuPName = $PuP.Key
     $Details = $PuP.Value
-    Write-Host "`n--- Scanning for $PuPName ---" -ForegroundColor Cyan
+    Write-Log "`n--- Scanning for $PuPName ---" -ForegroundColor Cyan
     Check-PuPProcesses -PuPName $PuPName -ProcessName $Details.Process
     Check-PuPFiles -PuPName $PuPName -PathPattern $Details.Path
     Check-PuPRegistry -PuPName $PuPName -RegKey $Details.RegKey
 }
 
-# Check for suspicious browser extensions (basic check)
-Write-Host "`nChecking for suspicious browser extensions..." -ForegroundColor Green
+# Check for suspicious browser extensions
+Write-Log "`nChecking for suspicious browser extensions..." -ForegroundColor Green
 $extensionPaths = @(
     "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Extensions",
-    "$env:APPDATA\Mozilla\Firefox\Profiles\*\extensions"
+    "$env:APPDATA\Mozilla\Firefox\Profiles\*\extensions",
+    "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Extensions"
 )
+$extensionsFound = $false
 foreach ($path in $extensionPaths) {
-    Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | 
-    Where-Object { $_.Name -match "toolbar|adware|optimizer|honey|shopper" } |
-    Select-Object Name, FullName | Format-Table -AutoSize
+    $extensions = Get-ChildItem -Path $path -Recurse -ErrorAction SilentlyContinue | 
+    Where-Object { $_.Name -match "toolbar|adware|optimizer|honey|shopper|onestart|ccleaner|wavebrowser" } |
+    Select-Object Name, FullName
+    if ($extensions) {
+        if (-not $extensionsFound) {
+            Write-Log "Found potential suspicious browser extensions:" -ForegroundColor Yellow
+            $extensionsFound = $true
+        }
+        # Format extension info as a string for logging
+        $extOutput = $extensions | Format-Table -AutoSize | Out-String
+        Write-Log $extOutput
+    }
+}
+if (-not $extensionsFound) {
+    Write-Log "No suspicious browser extensions detected." -ForegroundColor Green
 }
 
-Write-Host "Scan complete. Review output for potential PuPs." -ForegroundColor Green
+Write-Log "Scan complete. Results saved to $logFile." -ForegroundColor Green
