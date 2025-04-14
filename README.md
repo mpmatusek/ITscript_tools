@@ -207,6 +207,11 @@ This guide provides step-by-step instructions to remove common Potentially Unwan
 - Keep Windows and browsers updated.
 - Enable real-time protection in Windows Defender.
 
+## PuP Detection Script
+- **Detect-PuPs.ps1**: Scans for PuPs and logs results to a file on your Desktop (`PuP_Scan_Log_<timestamp>.txt`). Covers Conduit Search, WaveBrowser, CCleaner, OneStart Browser, and more.
+- **Usage**: Run in PowerShell as Administrator. See script comments for details.
+- **Log File**: The detection script saves results to `PuP_Scan_Log_<timestamp>.txt` on your Desktop for easy review.
+
 ---
 
 *Last Updated: April 14, 2025*
